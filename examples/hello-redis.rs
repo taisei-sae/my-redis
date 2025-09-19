@@ -1,4 +1,5 @@
 use mini_redis::{Result, client};
+use std::future::Future;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
