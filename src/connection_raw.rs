@@ -1,6 +1,3 @@
-use std::io::Cursor;
-
-use bytes::Buf;
 use mini_redis::{Frame, Result};
 use tokio::{io::AsyncReadExt, net::TcpStream};
 
@@ -25,41 +22,31 @@ impl Connection {
                 return Ok(Some(frame));
             }
 
+            // Does buffer have enough capacity?
             if self.buffer.len() == self.cursor {
+                // Grow the buffer
                 self.buffer.resize(self.cursor * 2, 0);
             }
 
+            // read from stream and write into buffer from the position of cursor.
+            // Don't forget to pass the empty portion of the buffer
+            // because `read` overwrites the buffer.
             let n = self.stream.read(&mut self.buffer[self.cursor..]).await?;
 
+            // Is the connection closed?
             if n == 0 {
+                // Received no data from stream
+                // and closed connection gracefully
                 if self.cursor == 0 {
                     return Ok(None);
                 } else {
+                    // Received some incomplete data but the connection has been closed,
+                    // this means the connection was closed abruptly.
                     return Err("connection reset by peer".into());
                 }
             } else {
                 self.cursor += n;
             }
-        }
-    }
-
-    fn parse_frame(&mut self) -> Result<Option<Frame>> {
-        let mut buf = Cursor::new(&self.buffer[..]);
-
-        match Frame::check(&mut buf) {
-            Ok(_) => {
-                let len = buf.position() as usize;
-
-                buf.set_position(0);
-
-                let frame = Frame::parse(&mut buf)?;
-
-                self.buffer.advance(len);
-
-                Ok(Some(frame))
-            }
-            Err(mini_redis::frame::Error::Incomplete) => Ok(None),
-            Err(e) => Err(e.into()),
         }
     }
 }
